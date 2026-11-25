@@ -3,7 +3,7 @@
 # Sources come from the private GitLab with $GITLAB_TOKEN; the public log shows step names and results only,
 # full logs go to logs/ and leave the runner encrypted.
 set -uo pipefail
-: "${GITLAB_TOKEN:?}" "${REF:?}" "${M1_ENV:=user}" "${RUN_PYTEST:=false}"
+: "${GITLAB_TOKEN:?}" "${REF:?}" "${M1_ENV:=user}" "${RUN_PYTEST:=false}" "${TESTS:=}"
 ROOT=$PWD; LOGS=$ROOT/logs; SRC=$ROOT/src; mkdir -p "$LOGS"
 REPO=https://oauth2@gitlab.deeppavlov.ai/deeppavlov/deus-ex-harness-team/deus-ex-harness.git
 export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=$ROOT/.askpass
@@ -37,7 +37,14 @@ artifact_smoke() { uv run python scripts/smoke_m1_artifact.py --artifact "$AGENT
 health() { python3 "$ROOT/smoke.py" "$AGENT"; }
 ui() { cd "$LOGS" && node "$ROOT/ui.mjs" "$AGENT"; }
 tests() { uv run pytest -q -p no:cacheprovider; }
+targeted() { read -ra t <<<"$TESTS"; uv run pytest -rA -p no:cacheprovider --basetemp="$LOGS/tmp" "${t[@]}"; }
 
+if [ -n "$TESTS" ]; then
+  step fetch fetch && echo "commit $(tail -1 "$LOGS/fetch.log")" && step tools tools &&
+    step deps uv sync --all-groups --frozen &&
+    step pytest targeted; echo "pytest: $(grep -E '[0-9]+ (passed|failed)' "$LOGS/pytest.log" | tail -1)"
+  rm -f "$GIT_ASKPASS"; exit $FAILED
+fi
 step fetch fetch && echo "commit $(tail -1 "$LOGS/fetch.log")" &&
   step tools tools && step deps deps && step build build &&
   { step artifact_smoke artifact_smoke; step health health; step ui ui; }

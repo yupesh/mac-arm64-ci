@@ -15,6 +15,9 @@ on:
         description: also run the test suite
         type: boolean
         default: false
+      tests:
+        description: only these pytest targets (skips build and smoke, keeps tmp dirs in logs)
+        default: ''
       os:
         type: choice
         options: [macos-15, macos-26]
@@ -42,6 +45,7 @@ jobs:
           REF: ${{ inputs.ref }}
           M1_ENV: ${{ inputs.env }}
           RUN_PYTEST: ${{ inputs.pytest }}
+          TESTS: ${{ inputs.tests }}
         run: ./run.sh
       - name: Encrypt logs
         if: always()
