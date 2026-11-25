@@ -1,0 +1,57 @@
+name: mac-arm64
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: branch or commit
+        required: true
+        default: dev
+      env:
+        description: M1 build environment
+        type: choice
+        options: [user]
+        default: user
+      pytest:
+        description: also run the test suite
+        type: boolean
+        default: false
+      os:
+        type: choice
+        options: [macos-15, macos-26]
+        default: macos-26
+permissions:
+  contents: read
+concurrency:
+  group: mac-arm64
+  cancel-in-progress: false
+jobs:
+  mac:
+    if: github.actor == github.repository_owner
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Host
+        run: uname -m; sw_vers -productVersion
+      - name: Build and smoke
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          REF: ${{ inputs.ref }}
+          M1_ENV: ${{ inputs.env }}
+          RUN_PYTEST: ${{ inputs.pytest }}
+        run: ./run.sh
+      - name: Encrypt logs
+        if: always()
+        run: |
+          brew install -q age >/dev/null
+          tar -czf - logs | age -r "$(cat logs.recipient)" -o logs.tgz.age
+          rm -rf logs src
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: logs-${{ github.run_id }}
+          path: logs.tgz.age
+          retention-days: 7
