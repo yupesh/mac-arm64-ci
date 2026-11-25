@@ -37,7 +37,7 @@ artifact_smoke() { uv run python scripts/smoke_m1_artifact.py --artifact "$AGENT
 health() { python3 "$ROOT/smoke.py" "$AGENT"; }
 ui() { cd "$LOGS" && node "$ROOT/ui.mjs" "$AGENT"; }
 tests() { uv run pytest -q -p no:cacheprovider; }
-targeted() { read -ra t <<<"$TESTS"; uv run pytest -rA -p no:cacheprovider --basetemp="$LOGS/tmp" "${t[@]}"; }
+targeted() { read -ra t <<<"$TESTS"; mkdir -p "$LOGS/stacks"; STACK_DUMP_DIR="$LOGS/stacks" PYTHONPATH="$ROOT/diag" uv run pytest -rA -p no:cacheprovider --basetemp="$LOGS/tmp" "${t[@]}"; }
 
 export LOGS
 if [ "$VPN" = true ]; then
