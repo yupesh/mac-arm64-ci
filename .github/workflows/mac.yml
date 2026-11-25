@@ -18,6 +18,10 @@ on:
       tests:
         description: only these pytest targets (skips build and smoke, keeps tmp dirs in logs)
         default: ''
+      vpn:
+        description: connect the lab VPN and probe stage first
+        type: boolean
+        default: false
       os:
         type: choice
         options: [macos-15, macos-26]
@@ -46,10 +50,14 @@ jobs:
           M1_ENV: ${{ inputs.env }}
           RUN_PYTEST: ${{ inputs.pytest }}
           TESTS: ${{ inputs.tests }}
+          VPN: ${{ inputs.vpn }}
+          VPN_CONFIG: ${{ secrets.VPN_CONFIG }}
+          VPN_AUTH: ${{ secrets.VPN_AUTH }}
         run: ./run.sh
       - name: Encrypt logs
         if: always()
         run: |
+          ./vpn.sh down
           brew install -q age >/dev/null
           tar -czf - logs | age -r "$(cat logs.recipient)" -o logs.tgz.age
           rm -rf logs src
