@@ -49,6 +49,16 @@ if [ -n "$TESTS" ]; then
     step pytest targeted; echo "pytest: $(grep -E '[0-9]+ (passed|failed)' "$LOGS/pytest.log" | tail -1)"
   rm -f "$GIT_ASKPASS"; exit $FAILED
 fi
+if [ "${1:-}" = "stage-build" ]; then
+  [ "$M1_ENV" = stage ] && step fetch fetch || exit 1
+  actual=$(tail -1 "$LOGS/fetch.log")
+  [ "$actual" = "$REF" ] || { echo "Unexpected stage commit"; exit 1; }
+  echo "commit $actual"
+  unset GITLAB_TOKEN
+  rm -f "$GIT_ASKPASS"
+  step tools tools && step deps deps && step build build
+  exit $?
+fi
 step fetch fetch && echo "commit $(tail -1 "$LOGS/fetch.log")" &&
   step tools tools && step deps deps && step build build &&
   { step artifact_smoke artifact_smoke; step health health; step ui ui; }

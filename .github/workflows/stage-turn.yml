@@ -1,0 +1,67 @@
+name: mac-arm64-stage-turn
+on: workflow_dispatch
+
+permissions:
+  contents: read
+concurrency:
+  group: mac-arm64
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    if: github.actor == github.repository_owner && github.ref == 'refs/heads/main'
+    environment: stage-qa
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      REF: 1ad2a0658e2d1510b243503b1fcfc5d37434c06a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build pinned stage client
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          M1_ENV: stage
+          M1_STAGE_BROKER_PUBLIC_KEY: ${{ vars.M1_STAGE_BROKER_PUBLIC_KEY }}
+        run: |
+          test -n "$M1_STAGE_BROKER_PUBLIC_KEY" || { echo 'Missing stage broker public key'; exit 1; }
+          ./run.sh stage-build
+      - name: Connect stage VPN
+        env:
+          VPN_CONFIG: ${{ secrets.VPN_CONFIG }}
+          VPN_AUTH: ${{ secrets.VPN_AUTH }}
+        run: |
+          ./vpn.sh up >logs/vpn-up.log 2>&1
+          ./vpn.sh probe >logs/vpn-probe.log 2>&1
+      - name: Test SSO and file delivery
+        env:
+          STAGE_AUTH: ${{ secrets.STAGE_AUTH }}
+        run: |
+          umask 077
+          test -n "$STAGE_AUTH" || { echo 'Missing stage CI login'; exit 1; }
+          build_dir=src/app/desktop/.build/web-agent
+          python3 arm_stage_turn.py "$build_dir/dist/m1-agent" \
+            "$build_dir/defaults/stage/m1-build.json" --commit "$REF" \
+            --scratch-parent "$RUNNER_TEMP" >"$RUNNER_TEMP/stage-receipt.json"
+      - name: Disconnect stage VPN
+        if: always()
+        run: ./vpn.sh down
+      - name: Encrypt receipt
+        if: ${{ !cancelled() }}
+        run: |
+          receipt="$RUNNER_TEMP/stage-receipt.json"
+          if test -s "$receipt"; then
+            command -v age >/dev/null || brew install -q age >/dev/null
+            age -r "$(cat logs.recipient)" -o "$RUNNER_TEMP/stage-receipt.json.age" "$receipt"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: stage-receipt-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage-receipt.json.age
+          if-no-files-found: ignore
+          retention-days: 7
